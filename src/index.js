@@ -1,12 +1,6 @@
 const configs = require('./config');
 const { Doctolib } = require('./doctolib');
 
-const parser = require('./parser');
-
-// const client = await configs.getDiscordBot();
-// const user = await client.users.fetch(configs.getDiscordUserId());
-// user.send('Heelllooo world');
-
 async function main () {
     const doctolib = new Doctolib();
 
@@ -16,7 +10,6 @@ async function main () {
     // Go to specified city
     await doctolib.searchByCity(configs.getVaccinationCity());
 
-
     while (true) {
         // Looking for slots
         const slots = await doctolib.getAvailableSlots();
@@ -24,9 +17,16 @@ async function main () {
             if (!location.slots.length)
                 continue;
             // There are available slots on this location
-            await doctolib.bookFirstSlot(location);
+            try {
+                await doctolib.bookFirstSlot(location);
 
-            return;
+                // Send confirmation via discord
+                const client = await configs.getDiscordBot();
+                const user = await client.users.fetch(configs.getDiscordUserId());
+                user.send('Un rendez-vous a été réservé !');
+            } catch (e) {
+                console.log(e);
+            }
         }
     }
 }

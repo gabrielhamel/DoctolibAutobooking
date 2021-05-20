@@ -7,27 +7,37 @@ puppeteer.use(StealthPlugin());
 
 async function autoScroll(page){
     await page.evaluate(async () => {
-        await new Promise((resolve, reject) => {
+        await new Promise((resolve) => {
             var totalHeight = 0;
             var distance = 100;
             var timer = setInterval(() => {
                 var scrollHeight = document.body.scrollHeight;
                 window.scrollBy(0, distance);
                 totalHeight += distance;
-
                 if(totalHeight >= scrollHeight){
                     clearInterval(timer);
                     resolve();
                 }
-            }, 10);
+            }, 50);
         });
     });
+}
+
+async function scrollToTop(page) {
+    await page.evaluate(async () => {
+        await new Promise((resolve) => {
+            window.scroll({
+                top: 0
+            });
+            resolve();
+        })
+    })
 }
 
 class Doctolib {
     constructor () {
         this.launchPromise = puppeteer.launch({
-            headless: false
+            headless: true
         });
         this.browser = null;
         this.page = null;
@@ -74,26 +84,47 @@ class Doctolib {
         await this.page.waitForSelector('label[for="eligibility-3"]');
         await this.page.click('label[for="eligibility-3"]');
         await this.page.click('.Tappable-inactive.dl-button-primary.dl-button.dl-button-size-normal');
+
+        await this.page.waitForTimeout(2000);
     }
 
     async getAvailableSlots() {
-        await this.page.reload();
+        try {
+            await this.page.goto(this.page.url());
+            await scrollToTop(this.page);
 
-        // Experimental
-        await this.page.goto('https://www.doctolib.fr/vaccination-covid-19/toulouse?ref_visit_motive_ids[]=6970&ref_visit_motive_ids[]=7005&ref_visit_motive_ids[]=7107&ref_visit_motive_ids[]=7945');
+            // Scroll until end (can be better with an auto scroller and wait for selector)
+            await autoScroll(this.page);
+            await this.page.waitForFunction(() => !document.querySelector('div.dl-loader'));
 
-        // Scroll until end
-        await autoScroll(this.page);
-        await this.page.waitForFunction(() => !document.querySelector('div.dl-loader'));
-        const rawResults = await this.page.$eval('div.search-results-col-list', results => results.outerHTML);
-        const results = parser.parseForSlots(rawResults);
-        return results;
+            const rawResults = await this.page.$eval('div.search-results-col-list', results => results.outerHTML);
+            return parser.parseForSlots(rawResults);
+        } catch (e) {
+            console.log(e);
+            return [];
+        }
+    }
+
+    async parseAndBookCalendar(page) {
+        try {
+            await page.waitForSelector('.Tappable-inactive.availabilities-slot', {
+                timeout: 100
+            });
+            const rawHtml = await page.$eval('div.dl-desktop-availabilities-days', result => result.outerHTML);
+            await page.waitForSelector('.Tappable-inactive.dl-button-info-link.dl-button.dl-button-block.dl-button-size-normal > span', {
+                timeout: 100
+            });
+            const calendar = parser.parseCalendar(h.parseDocument(rawHtml).firstChild.children);
+            const slot = calendar.slots[0];
+            await page.click(`.Tappable-inactive.availabilities-slot[aria-label="${slot.date} ${slot.hour}"]`);
+        } catch (e) {
+
+        }
     }
 
     async bookFirstSlot(location) {
         const page = await this.browser.newPage();
         await page.goto(location.url);
-
         await page.waitForSelector('#booking_motive');
         const rawMotivs = await page.$eval('#booking_motive', result => result.outerHTML);
         const motivs = parser.parseForMotive(rawMotivs);
@@ -103,11 +134,40 @@ class Doctolib {
                 break;
             }
         }
-        const rawHtml = await page.$eval('#booking-content > div.booking.booking-compact-layout > div:nth-child(5) > div > div.dl-layout-container.dl-layout-spacing-xs-0 > div.dl-step-children.dl-layout-item.dl-layout-size-xs-12.dl-layout-size-sm-12 > div > div > div:nth-child(1) > div > div > div.dl-desktop-availabilities-days', result => result.outerHTML);
-        const tmp = h.parseDocument(rawHtml);
+        do {
+            await this.parseAndBookCalendar(page);
+        } while (await page.$('body > div.js-appointment-rules-dialog.dl-modal') === null);
 
-        const calendar = parser.parseCalendar(h.parseDocument(rawHtml).firstChild.children);
-        console.log(calendar);
+        // Click on "J'accepte" buttons
+        do {
+            await this.parseAndBookCalendar(page);
+        } while (await page.$('body > div.js-appointment-rules-dialog.dl-modal') === null);
+
+        do {
+            try {
+                await page.waitForSelector('div.dl-button-check-outer > button:not([disabled])', {
+                    timeout: 100
+                });
+                await page.click('div.dl-button-check-outer > button:not([disabled])');
+            } catch (e) {
+
+            }
+        } while (await page.$('button.Tappable-inactive.dl-button-primary.booking-motive-rule-button.dl-button.dl-button-block.dl-button-size-normal') === null);
+
+        // Read and accept button
+        await page.click('button.Tappable-inactive.dl-button-primary.booking-motive-rule-button.dl-button.dl-button-block.dl-button-size-normal');
+
+        // Select me
+        await page.waitForSelector('span > .dl-radio-button-input');
+        await page.click('span > .dl-radio-button-input');
+
+        // Already consult
+        await page.waitForSelector('body > div.appointment-booking > div.dl-booking-funnel > div > div > div.col-sm-8 > div > div > form > div:nth-child(1) > div > div > div > label:nth-child(2)');
+        await page.click('body > div.appointment-booking > div.dl-booking-funnel > div > div > div.col-sm-8 > div > div > form > div:nth-child(1) > div > div > div > label:nth-child(2)');
+
+        // Confirm
+        await page.waitForSelector('body > div.appointment-booking > div.dl-booking-funnel > div > div > div.col-sm-8 > div > div > form > div.dl-card.dl-card-bg-white.dl-margin.dl-card.dl-padding-b-none > div > button');
+        await page.click('body > div.appointment-booking > div.dl-booking-funnel > div > div > div.col-sm-8 > div > div > form > div.dl-card.dl-card-bg-white.dl-margin.dl-card.dl-padding-b-none > div > button');
     }
 }
 
