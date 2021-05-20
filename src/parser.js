@@ -38,28 +38,24 @@ function parsePresentation(raw) {
  * @param {NodeWithChildren} raw
  */
 function parseCalendar(raw) {
-    let slots = [];
-    try {
-        const rawDays = raw.firstChild.firstChild.firstChild.firstChild.firstChild.firstChild.firstChild.children;
-        rawDays.shift();
-        rawDays.pop();
-        slots = rawDays.map(rawDay => {
-            const date = `${h.DomUtils.getText(rawDay.firstChild.firstChild)} ${h.DomUtils.getText(rawDay.firstChild.lastChild)}`;
-            const slots = rawDay.lastChild.children.map(slot => {
-                if (slot.attribs.class === 'availabilities-empty-slot')
-                    return null;
-                return {
-                    date,
-                    hour: h.DomUtils.getText(slot)
-                }
-            });
-            return slots.filter(s => !!s);
-        }).reduce((acc, curr) => acc.concat(curr), []);
-    } catch (e) {
-
-    }
+    let results = [];
+    const rawDays = raw;
+    rawDays.shift();
+    rawDays.pop();
+    results = rawDays.map(rawDay => {
+        const date = `${h.DomUtils.getText(rawDay.firstChild.firstChild)} ${h.DomUtils.getText(rawDay.firstChild.lastChild)}`;
+        const slots = rawDay.lastChild.children.map(slot => {
+            if (slot.attribs.class === 'availabilities-empty-slot')
+                return null;
+            return {
+                date,
+                hour: h.DomUtils.getText(slot)
+            }
+        });
+        return slots.filter(s => !!s);
+    }).reduce((acc, curr) => acc.concat(curr), []);
     return {
-        slots
+        slots: results
     };
 }
 
@@ -70,7 +66,7 @@ function parseCalendar(raw) {
 function parseLocation(raw) {
     return {
         ...parsePresentation(raw.firstChild),
-        ...parseCalendar(raw.lastChild)
+        ...parseCalendar(raw.lastChild.firstChild.firstChild.firstChild.firstChild.firstChild.firstChild.firstChild.children)
     };
 }
 
@@ -85,7 +81,16 @@ function parseForSlots(rawHTML) {
     return locations.map(l => parseLocation(l));
 }
 
+function parseForMotive(rawHTML) {
+    const parsed = h.parseDocument(rawHTML);
+    const options = parsed.firstChild.children;
+    options.shift();
+    return options.map(option => option.attribs.value);
+}
+
 module.exports = {
     parseForSlots,
-    parseForCities
+    parseForCities,
+    parseForMotive,
+    parseCalendar
 }

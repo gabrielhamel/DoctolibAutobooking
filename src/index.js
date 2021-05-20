@@ -16,13 +16,19 @@ async function main () {
     // Go to specified city
     await doctolib.searchByCity(configs.getVaccinationCity());
 
-    // Looking for slots
-    const slots = await doctolib.getAvailableSlots();
 
+    while (true) {
+        // Looking for slots
+        const slots = await doctolib.getAvailableSlots();
+        for (let location of slots) {
+            if (!location.slots.length)
+                continue;
+            // There are available slots on this location
+            await doctolib.bookFirstSlot(location);
 
-    console.dir(slots, {
-        depth: null,
-    });
+            return;
+        }
+    }
 }
 
 main();
