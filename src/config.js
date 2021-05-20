@@ -23,15 +23,20 @@ function getVaccinationCity() {
     return getenv('VACCINATION_CITY');
 }
 
+
+let discordClient = null;
 /**
  * Return the bot client when is fully operational
  * @returns {Promise<Discord.Client>}
  */
 function getDiscordBot() {
     return new Promise((resolve) => {
+        if (discordClient)
+            return resolve(discordClient);
         const client = new Discord.Client();
         client.on('ready', () => {
-            resolve(client);
+            discordClient = client;
+            resolve(discordClient);
         });
         client.login(getDiscordBotToken());
     });

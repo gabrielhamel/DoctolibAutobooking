@@ -74,11 +74,18 @@ function parseLocation(raw) {
     };
 }
 
-function parse(rawHTML) {
+function parseForCities(rawHTML) {
+    const parsed = h.parseDocument(rawHTML);
+    const city = parsed.firstChild.children[1];
+    return city.attribs.id;
+}
+
+function parseForSlots(rawHTML) {
     const locations = filterSlots(rawHTML);
     return locations.map(l => parseLocation(l));
 }
 
 module.exports = {
-    parse
+    parseForSlots,
+    parseForCities
 }
